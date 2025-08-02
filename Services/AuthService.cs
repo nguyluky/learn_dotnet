@@ -8,6 +8,7 @@ namespace test_api.Services
     public interface IAuthService
     {
         Task<bool> EmailExistsAsync(string email);
+        Task<User?> GetUserByEmailAsync(string email);
         Task<User> RegisterAsync(string name, string email, string? phone, string password, int role);
         Task<User> LoginAsync(string email, string password);
         Task<User> GetUserByIdAsync(int userId);
@@ -20,6 +21,14 @@ namespace test_api.Services
     public class AuthService : IAuthService
     {
         private readonly StoreContext _context;
+
+        public async Task<User?> GetUserByEmailAsync(string email)
+        {
+            return await _context.Users
+                .Where(u => u.Email == email)
+                .Include(u => u.Rule)
+                .FirstOrDefaultAsync();
+        }
 
         public async Task<int> GetDefaultRoleId()
         {

@@ -1,12 +1,13 @@
 
+using Google.Apis.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using test_api.Exceptions;
 using test_api.Helpers;
 using test_api.Models.Dtos;
 using test_api.Models.Entities;
 using test_api.Models.Responses;
 using test_api.Services;
+
 namespace test_api.controllers
 {
     [ApiController]
@@ -101,6 +102,56 @@ namespace test_api.controllers
             return Ok(new { AccessToken = newAccessToken });
         }
 
+
+        [HttpPost("google-login")]
+        [AllowAnonymous]
+        public async Task<ActionResult<ApiResponse<LoginResponseDto>>> GoogleLogin([FromBody] GoogleAuthRequest googleLoginRequest)
+        {
+            GoogleJsonWebSignature.Payload payload;
+            try
+            {
+                Console.WriteLine("Validating Google token: " + googleLoginRequest.AccessToken);
+                payload = await GoogleJsonWebSignature.ValidateAsync(googleLoginRequest.AccessToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Google login failed.");
+                return BadRequest(ApiResponse<LoginResponseDto>.ErrorResponse("Invalid Google ID token."));
+            }
+
+
+            var email = payload.Email;
+
+            var user = await _authService.GetUserByEmailAsync(email);
+
+            if (user == null)
+            {
+                // If user does not exist, register them
+                int role = await _authService.GetDefaultRoleId();
+                user = await _authService.RegisterAsync(
+                    payload.Name, email, null, Guid.NewGuid().ToString(), role
+                );
+            }
+
+            // Generate JWT tokens
+            var accessToken = _jwtHelper.GenerateAccessToken(user);
+            var refreshToken = _jwtHelper.GenerateRefreshToken(user);
+
+            Console.WriteLine(accessToken);
+            Console.WriteLine(refreshToken);
+
+            return Ok(ApiResponse<LoginResponseDto>.SuccessResponse(new LoginResponseDto
+            {
+                AccessToken = accessToken,
+                RefreshToken = refreshToken
+            }));
+        }
+
+    }
+
+    public class GoogleAuthRequest
+    {
+        public string AccessToken { get; set; } = null!;
     }
 
     public class LoginRequest
